@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bet Master Pro 🏆</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <style>
+        :root {
+            --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; 
+            --accent: #00e676; --locked: #ff5252; --pending: #ff9800;
+            --cl-color: #2962ff; --cup-color: #9c27b0;
+        }
+        body { 
+            font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text);
+            text-align: center; margin: 0; padding: 15px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        h1 { color: var(--accent); margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1px; font-size: 1.8rem; }
+        
+        /* סרגל סטטיסטיקה */
+        .stats-bar {
+            display: flex; justify-content: space-around; background: var(--card);
+            padding: 15px; border-radius: 12px; margin-bottom: 25px; 
+            border: 1px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .stat-box { display: flex; flex-direction: column; }
+        .stat-num { font-size: 1.6rem; font-weight: bold; color: var(--accent); }
+        .stat-label { font-size: 0.8rem; color: #888; margin-top: 2px; }
+
+        /* הודעות מערכת */
+        #status-msg { margin-bottom: 20px; color: #888; font-size: 0.9rem; }
+
+        /* כרטיס משחק */
+        .match-card {
+            background: var(--card); border-radius: 15px; padding: 15px; margin-bottom: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3); position: relative; border-right: 5px solid #444;
+            transition: transform 0.2s;
+        }
+        .match-card:active { transform: scale(0.98); }
+        
+        /* צבעים לפי תחרות */
+        .match-card[data-comp="CL"] { border-right-color: var(--cl-color); } /* אלופות */
+        .match-card[data-comp="FAC"], .match-card[data-comp="CDR"] { border-right-color: var(--cup-color); } /* גביעים */
+        .match-card[data-comp="PD"], .match-card[data-comp="PL"] { border-right-color: var(--accent); } /* ליגות */
+
+        .league-badge {
+            font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; 
+            background: #333; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px;
+            color: #ccc;
+        }
+        
+        .teams-row { 
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 15px; font-weight: bold; font-size: 1.1rem; 
+        }
+        .team-name { width: 40%; word-wrap: break-word; line-height: 1.2; }
+        .vs-badge { font-size: 0.8rem; color: #666; font-weight: normal; }
+        .score-display { font-size: 1.4rem; letter-spacing: 3px; color: white; }
+        
+        .time-info { font-size: 0.8rem; color: var(--pending); margin-bottom: 12px; font-weight: 500; }
+        
+        /* אזור הניחוש */
+        .prediction-area { 
+            background: rgba(0,0,0,0.3); padding: 12px; border-radius: 10px; 
+            display: flex; justify-content: center; gap: 10px; align-items: center;
+        }
+        
+        input[type="number"] {
+            width: 50px; padding: 10px; text-align: center; border-radius: 8px; border: 1px solid #444;
+            background: #252525; color: white; font-size: 1.3rem; font-weight: bold; outline: none;
+        }
+        input:focus { border-color: var(--accent); }
+        input:disabled { background: #1a1a1a; color: #555; border-color: #222; }
+
+        .save-btn {
+            background: var(--accent); color: black; border: none; padding: 12px 0;
+            border-radius: 30px; font-weight: bold; font-size: 1rem; cursor: pointer; 
+            margin-top: 15px; width: 100%; box-shadow: 0 4px 10px rgba(0,230,118,0.2);
+        }
+        .save-btn:disabled { background: #333; color: #666; cursor: not-allowed; box-shadow: none; }
+
+        /* תוצאות */
+        .result-badge {
+            display: block; padding: 8px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; margin-top: 15px;
+        }
+        .exact { background: rgba(0, 255, 136, 0.15); color: #00ff88; border: 1px solid #00ff88; }
+        .correct { background: rgba(255, 165, 2, 0.15); color: #ffa502; border: 1px solid #ffa502; }
+        .wrong { background: rgba(255, 82, 82, 0.15); color: #ff5252; border: 1px solid #ff5252; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Bet Master 🏆</h1>
+
+    <div class="stats-bar">
+        <div class="stat-box">
+            <span id="total-points" class="stat-num">0</span>
+            <span class="stat-label">נקודות</span>
+        </div>
+        <div class="stat-box">
+            <span id="hit-rate" class="stat-num">0%</span>
+            <span class="stat-label">דיוק</span>
+        </div>
+    </div>
+
+    <div id="status-msg">טוען משחקים מהעולם...</div>
+    <div id="matches-container"></div>
+
+    <script>
+        // ==========================================
+        // 🔑 ה-API Key שלך כבר בפנים:
+        // ==========================================
+        const API_KEY = "23eee37d97f9491ba71b20576af4bea3"; 
+        
+        const firebaseConfig = {
+          apiKey: "AIzaSyBR9taEgDlp4CaFa1oDlA2wM9ENoZD2V9U",
+          authDomain: "nano-banana-gallery-4e291.firebaseapp.com",
+          projectId: "nano-banana-gallery-4e291",
+          storageBucket: "nano-banana-gallery-4e291.firebasestorage.app",
+          messagingSenderId: "843216131791",
+          appId: "1:843216131791:web:e63ec1ab2f70b0808dc9ba"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const COLLECTION = "bets_v2"; // אוסף חדש לגרסה החדשה
+
+        // הקבוצות שלך
+        const MY_TEAMS = [
+            81,  // Barcelona
+            57,  // Arsenal
+            86,  // Real Madrid
+            65   // Man City
+        ];
+        
+        // תחרויות: אלופות (2001), ספרדית (2014), אנגלית (2021), גביע אנגלי (2055), גביע המלך (2079)
+        const COMPETITIONS = "2001,2014,2021,2055,2079"; 
+
+        async function init() {
+            const statusDiv = document.getElementById('status-msg');
+            
+            // 1. שליפת ההימורים שלך מ-Firebase
+            const myBets = {};
+            try {
+                const snapshot = await db.collection(COLLECTION).get();
+                snapshot.forEach(doc => myBets[doc.id] = doc.data());
+            } catch (e) { console.error("Firebase Error", e); }
+
+            // 2. שליפת המשחקים מה-API
+            try {
+                // טווח תאריכים: 10 ימים אחורה עד 14 ימים קדימה
+                const today = new Date();
+                const dateFrom = new Date(today); dateFrom.setDate(today.getDate() - 10);
+                const dateTo = new Date(today); dateTo.setDate(today.getDate() + 14);
+                
+                const dFromStr = dateFrom.toISOString().split('T')[0];
+                const dToStr = dateTo.toISOString().split('T')[0];
+
+                const url = `https://api.football-data.org/v4/matches?competitions=${COMPETITIONS}&dateFrom=${dFromStr}&dateTo=${dToStr}`;
+                
+                const response = await fetch(url, {
+                    headers: { 'X-Auth-Token': API_KEY }
+                });
+                
+                if (!response.ok) throw new Error("API Limit or Error");
+
+                const data = await response.json();
+                statusDiv.style.display = 'none'; // הסתרת הודעת טעינה
+                renderMatches(data.matches, myBets);
+                calculateStats(data.matches, myBets);
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.innerHTML = `<span style="color:var(--locked)">שגיאה בטעינת נתונים.<br>אם אתה רואה את זה, ייתכן שצריך להתקין תוסף CORS בדפדפן או שה-API חסם זמנית.</span>`;
+            }
+        }
+
+        function renderMatches(matches, myBets) {
+            const container = document.getElementById('matches-container');
+            container.innerHTML = '';
+
+            // סינון: או שזה ליגת אלופות, או שזו אחת הקבוצות שלי
+            const relevantMatches = matches.filter(m => {
+                const isCL = m.competition.code === 'CL'; 
+                const isMyTeam = MY_TEAMS.includes(m.homeTeam.id) || MY_TEAMS.includes(m.awayTeam.id);
+                return isCL || isMyTeam;
+            });
+
+            if (relevantMatches.length === 0) {
+                container.innerHTML = '<div style="color:#666">אין משחקים קרובים לקבוצות אלו בשבועיים הקרובים.</div>';
+                return;
+            }
+
+            // מיון לפי זמנים
+            relevantMatches.sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
+
+            relevantMatches.forEach(match => {
+                const matchDate = new Date(match.utcDate);
+                const now = new Date();
+                
+                // חישוב זמן נעילה (שעה לפני)
+                const lockTime = new Date(matchDate);
+                lockTime.setHours(lockTime.getHours() - 1);
+                
+                // בדיקת סטטוסים
+                const isStarted = now >= matchDate; 
+                const isLocked = now >= lockTime;
+                const isFinished = match.status === 'FINISHED';
+                
+                const bet = myBets[match.id] || { home: '', away: '' };
+
+                // יצירת הכרטיס
+                const div = document.createElement('div');
+                div.className = 'match-card';
+                div.setAttribute('data-comp', match.competition.code); // לצבע בצד
+
+                // חישוב ניקוד ותצוגה
+                let resultHTML = '';
+                let resultClass = '';
+                let resultText = '';
+
+                if (isFinished && bet.home !== '') {
+                    const realHome = match.score.fullTime.home;
+                    const realAway = match.score.fullTime.away;
+                    const betHome = parseInt(bet.home);
+                    const betAway = parseInt(bet.away);
+                    
+                    if (realHome === betHome && realAway === betAway) {
+                        resultClass = 'exact'; resultText = '🔥 בול פגיעה! (+3)';
+                    } else if (
+                        (realHome > realAway && betHome > betAway) || 
+                        (realHome < realAway && betHome < betAway) ||
+                        (realHome === realAway && betHome === betAway)
+                    ) {
+                        resultClass = 'correct'; resultText = '✅ כיוון נכון (+1)';
+                    } else {
+                        resultClass = 'wrong'; resultText = '❌ טעות (0)';
+                    }
+                    resultHTML = `<div class="result-badge ${resultClass}">${resultText}</div>`;
+                }
+
+                // פורמט תאריך
+                const dateStr = matchDate.toLocaleDateString('he-IL', {day:'numeric', month:'numeric'});
+                const timeStr = matchDate.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+
+                // לוגיקת כותרת סטטוס
+                let statusText = `⏳ ננעל ב-${lockTime.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'})}`;
+                if (isLocked && !isStarted) statusText = `🔒 ההימור ננעל`;
+                if (isStarted && !isFinished) statusText = `⚽ המשחק משוחק כעת`;
+                if (isFinished) statusText = `🏁 המשחק הסתיים`;
+
+                // תוצאה סופית או VS
+                const scoreDisplay = isStarted ? 
+                    `<span class="score-display">${match.score.fullTime.home ?? 0} - ${match.score.fullTime.away ?? 0}</span>` : 
+                    `<span class="vs-badge">VS</span>`;
+
+                div.innerHTML = `
+                    <span class="league-badge">${match.competition.name} | ${dateStr} ${timeStr}</span>
+                    
+                    <div class="teams-row">
+                        <span class="team-name" style="text-align:right;">${match.homeTeam.shortName || match.homeTeam.name}</span>
+                        ${scoreDisplay}
+                        <span class="team-name" style="text-align:left;">${match.awayTeam.shortName || match.awayTeam.name}</span>
+                    </div>
+                    
+                    <div class="time-info" style="${isLocked && !isFinished ? 'color:var(--locked)' : ''}">${statusText}</div>
+                    
+                    <div class="prediction-area">
+                        <input type="number" id="h-${match.id}" value="${bet.home}" ${isLocked ? 'disabled' : ''} placeholder="-">
+                        <span>:</span>
+                        <input type="number" id="a-${match.id}" value="${bet.away}" ${isLocked ? 'disabled' : ''} placeholder="-">
+                    </div>
+                    
+                    ${!isLocked ? `<button class="save-btn" onclick="saveBet(${match.id})">שמור הימור</button>` : ''}
+                    ${resultHTML}
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function saveBet(matchId) {
+            const homeVal = document.getElementById(`h-${matchId}`).value;
+            const awayVal = document.getElementById(`a-${matchId}`).value;
+
+            if (homeVal === '' || awayVal === '') return alert("יש להזין תוצאה מלאה!");
+
+            // אנימציה קטנה לכפתור
+            const btn = document.querySelector(`button[onclick="saveBet(${matchId})"]`);
+            const originalText = btn.innerText;
+            btn.innerText = "שומר...";
+            
+            db.collection(COLLECTION).doc(String(matchId)).set({
+                home: homeVal,
+                away: awayVal,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => {
+                btn.innerText = "נשמר! 👍";
+                btn.style.background = "#333";
+                btn.style.color = "#fff";
+                setTimeout(() => { 
+                    btn.innerText = originalText; 
+                    btn.style.background = ""; 
+                    btn.style.color = "";
+                }, 2000);
+            }).catch(e => {
+                alert("שגיאה: " + e);
+                btn.innerText = originalText;
+            });
+        }
+
+        function calculateStats(matches, myBets) {
+            let points = 0;
+            let correct = 0;
+            let totalFinishedBets = 0;
+
+            matches.forEach(m => {
+                if (m.status === 'FINISHED' && myBets[m.id]) {
+                    totalFinishedBets++;
+                    const bet = myBets[m.id];
+                    const realH = m.score.fullTime.home;
+                    const realA = m.score.fullTime.away;
+                    const betH = parseInt(bet.home);
+                    const betA = parseInt(bet.away);
+
+                    if (realH === betH && realA === betA) {
+                        points += 3; correct++;
+                    } else if (
+                        (realH > realA && betH > betA) || 
+                        (realH < realA && betH < betA) ||
+                        (realH === realA && betH === betA)
+                    ) {
+                        points += 1; correct++;
+                    }
+                }
+            });
+
+            document.getElementById('total-points').innerText = points;
+            const rate = totalFinishedBets > 0 ? Math.round((correct / totalFinishedBets) * 100) : 0;
+            document.getElementById('hit-rate').innerText = rate + "%";
+        }
+
+        init();
+    </script>
+</body>
+</html>
