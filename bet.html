@@ -3,12 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.firebaseio.com https://*.googleapis.com https://*.gstatic.com https://api.football-data.org data:;">
+    
     <title>Bet Master Pro 🏆</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
     <style>
+    /* מכאן ממשיך ה-CSS הרגיל שלך... אל תיגע בו */
         :root {
             --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; 
             --accent: #00e676; --locked: #ff5252; --pending: #ff9800;
